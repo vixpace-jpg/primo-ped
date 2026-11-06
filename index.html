@@ -215,7 +215,7 @@ function save(){try{localStorage.setItem('primo-ped-v1',JSON.stringify(state));$
 function setView(v){ui.view=v;$('#page').dataset.view=v;$$('[data-view-nav]').forEach(b=>b.classList.toggle('active',b.dataset.viewNav===v));if(v==='calendar')renderCalendar();if(v==='posts')renderPosts();window.scrollTo({top:0,behavior:'smooth'})}
 let themeSearchOpen=false,themeSearchIndex=0,themeSearchMatches=[];
 function themeCategoryName(t){return String(t.category||t.categoryName||t.group||'').trim()}
-function normalizedThemeText(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLocaleLowerCase('it').trim()}
+function normalizedThemeText(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').trim()}
 function closeThemeSearch(restore=true){
  themeSearchOpen=false;$('#themeResults').hidden=true;$('#themeSelect').setAttribute('aria-expanded','false');
  if(restore){let selected=activeTheme();$('#themeSelect').value=selected?.name||''}
