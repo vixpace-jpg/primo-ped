@@ -84,3 +84,15 @@ test('Link condivisibile avvia un workspace vuoto senza cancellare i progetti es
  assert.match(js,/\$\$\('#shareCleanLink,#shareCleanLinkMobile'\)\.forEach/);
  assert.match(js,/function createPedFromSelectedTheme\(\)/);
 });
+
+test('Animazione iniziale elegante, una sola volta per scheda, accessibile',()=>{
+ assert.match(html,/<style id="ped-entry-motion">/);
+ assert.match(html,/pedEnterHeader/);
+ assert.match(html,/pedEnterLeft/);
+ assert.match(html,/pedEnterUp/);
+ assert.match(html,/html\.ped-first-enter \.workspace > \.main/);
+ assert.match(html,/prefers-reduced-motion:reduce/);
+ assert.match(html,/sessionStorage\.getItem\('primo-ped-entry-seen'\)/);
+ assert.match(html,/sessionStorage\.setItem\('primo-ped-entry-seen','1'\)/);
+ assert.doesNotMatch(html,/id="introOverlay"|id="splashScreen"/);
+});
