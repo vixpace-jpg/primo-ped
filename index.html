@@ -221,21 +221,52 @@ let toastTimeout;function toast(msg,duration=3700){let e=$('#toast');e.textConte
 function save(){try{localStorage.setItem('primo-ped-v1',JSON.stringify(state));$('#savedText').textContent='Salvato in locale'}catch(e){toast('Spazio locale esaurito: prova a esportare il piano')}}
 function setView(v){ui.view=v;$('#page').dataset.view=v;$$('[data-view-nav]').forEach(b=>b.classList.toggle('active',b.dataset.viewNav===v));if(v==='calendar')renderCalendar();if(v==='posts')renderPosts();window.scrollTo({top:0,behavior:'smooth'})}
 let themeSearchOpen=false,themeSearchIndex=0,themeSearchMatches=[];
+let repositoryThemes=[],repositoryThemesStatus='loading';
 function themeCategoryName(t){return String(t.category||t.categoryName||t.group||'').trim()}
 function normalizedThemeText(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').trim()}
+async function loadRepositoryThemes(){
+ try{
+  const response=await fetch('./content-library.json',{cache:'no-cache'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const payload=await response.json();
+  if(!Array.isArray(payload.contents))throw Error('Formato repository non valido');
+  repositoryThemes=payload.contents.filter(t=>t&&typeof t.title==='string'&&t.title.trim()).map(t=>({
+   id:'library:'+t.id,name:t.title.trim(),category:themeCategoryName(t),rubric:t.rubric||'',libraryTopicId:t.id
+  }));
+  repositoryThemesStatus='ready';
+ }catch(error){
+  repositoryThemesStatus='error';
+  console.warn('Repository temi non disponibile:',error);
+ }
+ if(themeSearchOpen)renderThemeSearch();
+}
+function availableThemeChoices(){
+ const combined=state.themes.map(t=>({...t,source:'saved'}));
+ const existingNames=new Set(state.themes.map(t=>normalizedThemeText(t.name)));
+ for(const theme of repositoryThemes)if(!existingNames.has(normalizedThemeText(theme.name)))combined.push({...theme,source:'library'});
+ return combined;
+}
 function closeThemeSearch(restore=true){
  themeSearchOpen=false;$('#themeResults').hidden=true;$('#themeSelect').setAttribute('aria-expanded','false');
+ $('#themeSelect').removeAttribute('aria-activedescendant');
  if(restore){let selected=activeTheme();$('#themeSelect').value=selected?.name||''}
 }
 function chooseTheme(id){
- month().themeId=id;ui.editingThemeId=null;$('#themeDraft').value='';
+ let found=state.themes.find(t=>t.id===id);
+ if(!found){
+  const topic=repositoryThemes.find(t=>t.id===id);
+  if(!topic)return;
+  found=state.themes.find(t=>normalizedThemeText(t.name)===normalizedThemeText(topic.name));
+  if(!found){found={id:uid(),name:topic.name,category:topic.category,libraryTopicId:topic.libraryTopicId};state.themes.push(found)}
+ }
+ month().themeId=found.id;ui.editingThemeId=null;$('#themeDraft').value='';
  closeThemeSearch(false);save();renderChrome();
 }
 function renderThemeSearch(){
  const input=$('#themeSelect'),results=$('#themeResults'),selected=activeTheme();
  if(!themeSearchOpen){input.value=selected?.name||'';results.hidden=true;input.setAttribute('aria-expanded','false');return}
  const query=normalizedThemeText(input.value);
- themeSearchMatches=state.themes.filter(t=>normalizedThemeText(t.name).includes(query)||normalizedThemeText(themeCategoryName(t)).includes(query))
+ themeSearchMatches=availableThemeChoices().filter(t=>normalizedThemeText(t.name).includes(query)||normalizedThemeText(themeCategoryName(t)).includes(query)||normalizedThemeText(t.rubric).includes(query))
  .sort((a,b)=>themeCategoryName(a).localeCompare(themeCategoryName(b),'it')||a.name.localeCompare(b.name,'it'));
  if(themeSearchIndex>=themeSearchMatches.length)themeSearchIndex=0;
  let prevCategory=null;
@@ -244,9 +275,10 @@ function renderThemeSearch(){
   if(category!==prevCategory){header=category?'<div class="themeCategory" role="presentation">'+escapeHTML(category)+'</div>':'';prevCategory=category}
   return header+'<button type="button" role="option" id="themeOption'+i+'" data-theme-option="'+escapeHTML(t.id)+'" class="themeResult '+(i===themeSearchIndex?'is-active':'')+'" aria-selected="'+(t.id===month().themeId)+'"><span>'+escapeHTML(t.name)+'</span>'+(t.id===month().themeId?'<span class="themeCheck" aria-hidden="true">✓</span>':'')+'</button>'
  }).join('');
- if(!themeSearchMatches.length)markup='<div class="themeEmpty">'+(state.themes.length?'Nessun tema trovato. Prova un’altra ricerca.':'Nessun tema disponibile. Creane uno o importa un JSON.')+'</div>';
+ if(!themeSearchMatches.length)markup='<div class="themeEmpty">'+(repositoryThemesStatus==='loading'?'Caricamento temi dalla repository…':repositoryThemesStatus==='error'?'Impossibile caricare la repository. Ricarica la pagina.':'Nessun tema trovato. Prova un’altra ricerca.')+'</div>';
  results.innerHTML=markup;results.hidden=false;input.setAttribute('aria-expanded','true');
- input.setAttribute('aria-activedescendant',themeSearchMatches.length?'themeOption'+themeSearchIndex:'');
+ if(themeSearchMatches.length)input.setAttribute('aria-activedescendant','themeOption'+themeSearchIndex);
+ else input.removeAttribute('aria-activedescendant');
 }
 function setupThemeSearch(){
  const input=$('#themeSelect'),picker=$('#themePicker');
@@ -267,6 +299,7 @@ function setupThemeSearch(){
  $('#themeResults').addEventListener('mousedown',e=>{if(e.target.closest('[data-theme-option]'))e.preventDefault()});
  $('#themeResults').addEventListener('click',e=>{const option=e.target.closest('[data-theme-option]');if(option)chooseTheme(option.dataset.themeOption)});
  document.addEventListener('pointerdown',e=>{if(themeSearchOpen&&!picker.contains(e.target))closeThemeSearch()});
+ loadRepositoryThemes();
 }
 function renderChrome(){let m=month();$('#monthTitle').textContent=fullMonth(state.selectedMonth).replace(/^./,c=>c.toUpperCase());$('#monthInput').value=state.selectedMonth;$('#monthInput').min=currentMonth;$('#deliver').disabled=!m.posts.length;$('#deliverMobile').disabled=!m.posts.length;renderThemeSearch();$('#editTheme').disabled=!m.themeId;$('#deleteTheme').disabled=!m.themeId;$('#resetMonth').disabled=!(m.posts||[]).length&&!m.themeId&&!m.generatedTheme;}
 function shortText(s,max=50){s=stripHTML(s);return s.length>max?s.slice(0,max-1)+'…':s}
