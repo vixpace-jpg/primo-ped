@@ -1,28 +1,49 @@
 # PRIMO PED
 
-Clone autonomo dell'editor PED Studio, con avvio **vuoto**: nessun tema, nessun Content e nessuna libreria editoriale precaricata.
+Planner editoriale odontoiatrico su Vercel, con editor locale per Content Post, Story e Carosello, calendario, consegna DOCX/ZIP e repository di 60 temi in 12 categorie.
 
-## Funzionalità
+## Repository come knowledge base
 
-- Content mensili senza limite fisso di 8, formati Post, Storia e Carosello.
-- Editor rich text, slide, date, calendario e riprogrammazione drag-and-drop.
-- Temi creati manualmente o importati con il formato JSON `ped-studio-theme-v1`.
-- AI Theme Builder tramite guida Markdown e chat esterne, **senza API AI integrate**.
-- Consegna ZIP con DOCX e allegati; backup ZIP importabile/esportabile nel formato compatibile `ped-studio-v2`.
-- Salvataggio esclusivamente locale su `localStorage` (`primo-ped-v1`) e IndexedDB (`primo-ped-refs`).
+La repository in `content-library.json` è un **riferimento editoriale**, non un catalogo da copiare. In **Crea PED** selezioni una **categoria** (ed eventualmente un tema come focus) e il backend consulta i riferimenti della stessa categoria per creare un **nuovo PED** con titoli, headline, body, caption e slide originali. L'AI riceve istruzioni esplicite per non copiare i contenuti di riferimento e per evitare claim sanitari non supportati.
 
-## Avvio
+La knowledge base resta statica e versionata su GitHub; non c'è apprendimento permanente del modello né fine-tuning. Quando aggiorniamo il JSON, il prossimo deploy userà i nuovi contenuti.
 
-Applicazione statica: aprire `index.html` da un server HTTP locale o pubblicare questa repository in un **nuovo progetto Vercel**. Non collegare al progetto Vercel di PED Studio. `vercel.json` configura soltanto header generici: non ci sono variabili di ambiente richieste o integrazioni AI attive.
+## Generazione con OpenAI
 
-## Utilizzo iniziale
+`POST /api/generate-ped` (Vercel Node.js) chiama la **Responses API di OpenAI**, con schema JSON rigido. Il browser riceve esclusivamente i Content generati; la chiave **non viene mai inviata al frontend**. I risultati vengono inseriti nell'editor locale, senza cancellare i Content precedenti, e devono essere revisionati da una persona prima della pubblicazione.
 
-Scegliere il mese, premere **Aggiungi Content** anche senza creare un tema; oppure creare un tema manualmente. **Crea tema** guida all'uso di una chat AI esterna; **Carica tema** importa il JSON dopo conferma, se sostituisce Content esistenti. Il pulsante **Crea tema con AI** apre la stessa guida e non genera contenuti localmente. Nessuna demo viene caricata tramite parametri URL.
+`GET /api/generate-ped` restituisce `{ "enabled": false }` finché non sono configurati tutti i segreti: l'endpoint **non chiama OpenAI** in assenza di protezioni.
 
-## Verifiche
+### Variabili d'ambiente Vercel
 
-`npm test` esegue i controlli statici in `test/clone.test.mjs`. Verificare inoltre i flussi in browser: nuova scheda senza contenuti, aggiunta Content senza tema, formati Post/Storia/Carosello, conversione da una slide, reset mese, import JSON, calendario, generazione DOCX e import/export backup ZIP.
+Configurare in **Project → Settings → Environment Variables** per Production:
 
-La UI mantiene temporaneamente stile e colori dell'app sorgente; nessun nuovo branding è stato definito. Gli endpoint legacy di autenticazione/impostazioni e Gemini non sono distribuiti perché disattivati o non necessari ai flussi editoriali; il clone è intenzionalmente client-side.
+| Nome | Funzione |
+| --- | --- |
+| `OPENAI_API_KEY` | Chiave server OpenAI; usare tipo Sensitive/Encrypted, **mai NEXT_PUBLIC_** |
+| `PED_AI_ACCESS_CODE` | Codice forte, distinto dalla chiave API, da condividere con gli operatori autorizzati |
+| `UPSTASH_REDIS_REST_URL` | URL REST di un database Upstash Redis, per rate limiting centralizzato |
+| `UPSTASH_REDIS_REST_TOKEN` | Token REST Redis; conservare come secret |
+| `OPENAI_MODEL` | Opzionale: modello OpenAI; predefinito `gpt-6.1-terra` |
+| `PED_ALLOWED_ORIGIN` | Opzionale: origine del dominio personalizzato, ad esempio `https://ped.example.it` |
 
-**Repository sorgente, sola lettura:** `vixpace-jpg/ped-studio`. **Repository destinazione:** `vixpace-jpg/primo-ped`.
+Dopo aver salvato le variabili, **ridistribuire** il progetto. Non incollare le chiavi in chat, nel codice sorgente o in issue GitHub. Per il codice di accesso usare una stringa casuale lunga, non la password del proprio account.
+
+Sicurezza: controllo di origine, autenticazione tramite codice e confronto in tempo costante, input validato, limiti centralizzati (10 richieste/ora per IP e 80/giorno globali), timeout; il limiter blocca le chiamate in caso di indisponibilità. Il codice di accesso viene tenuto soltanto nel campo password e cancellato dopo la generazione riuscita; non viene salvato nel localStorage.
+
+Queste misure riducono il rischio di abuso di un endpoint pubblico, ma il **codice condiviso** non equivale a un sistema di account e permessi individuali. Per una distribuzione aziendale più ampia, integrare accesso nominativo/SSO, logging controllato e limiti di spesa direttamente in OpenAI e Vercel.
+
+### Test
+
+Eseguire `npm test`. Una volta configurati i segreti, testare da browser 4 e 8 Content su categorie diverse: generazione, rendering nel calendario, modifiche alle caption, salvataggio, DOCX e backup. Il deploy può riuscire anche senza credenziali, ma **la generazione effettiva non può essere provata senza un account OpenAI configurato**.
+
+## Funzioni editoriali
+
+- Primo avvio: mesi vuoti, Content illimitati; la knowledge base esiste separatamente e non riempie il mese automaticamente.
+- Ricerca incrementale dei temi, filtro e categoria. Anteprima contenuti su `repository.html`.
+- Caricamento di un tema JSON compatibile `ped-studio-theme-v1`.
+- Editor rich text, slide, Post/Storia/Carosello, calendario, reset mese e consegna DOCX/ZIP.
+- Salvataggio locale `primo-ped-v1`; backup `ped-studio-v2`.
+- La funzione esterna AI Theme Builder resta accessibile da **Crea tema**; **Crea PED** usa soltanto OpenAI, se configurato.
+
+Sito: https://primo-ped.vercel.app
