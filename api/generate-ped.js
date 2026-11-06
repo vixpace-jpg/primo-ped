@@ -1,11 +1,11 @@
 import {readFileSync} from 'node:fs';
 import {createHash,timingSafeEqual} from 'node:crypto';
 const library=JSON.parse(readFileSync(new URL('../content-library.json',import.meta.url),'utf8')).contents;
-const MODEL=process.env.OPENAI_MODEL||'gpt-6.1-terra';
+const MODEL='openrouter/free'; // Solo router gratuito: non permettere modelli a pagamento tramite configurazione.
 const schema={type:'object',additionalProperties:false,required:['contents'],properties:{contents:{type:'array',items:{type:'object',additionalProperties:false,required:['title','headline','subhead','body','other','caption','format','slides'],properties:{title:{type:'string'},headline:{type:'string'},subhead:{type:'string'},body:{type:'string'},other:{type:'string'},caption:{type:'string'},format:{type:'string',enum:['post','story','carousel']},slides:{type:'array',items:{type:'object',additionalProperties:false,required:['headline','subhead','body'],properties:{headline:{type:'string'},subhead:{type:'string'},body:{type:'string'}}}}}}}}};
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').trim();
 const send=(res,status,object)=>res.status(status).setHeader('Cache-Control','no-store').setHeader('X-Content-Type-Options','nosniff').json(object);
-const isConfigured=()=>Boolean(process.env.OPENAI_API_KEY&&process.env.PED_AI_ACCESS_CODE&&process.env.UPSTASH_REDIS_REST_URL&&process.env.UPSTASH_REDIS_REST_TOKEN);
+const isConfigured=()=>Boolean(process.env.OPENROUTER_API_KEY&&process.env.PED_AI_ACCESS_CODE&&process.env.UPSTASH_REDIS_REST_URL&&process.env.UPSTASH_REDIS_REST_TOKEN);
 function validCode(code){if(typeof code!=='string'||code.length>256||!code||!process.env.PED_AI_ACCESS_CODE)return false;return timingSafeEqual(createHash('sha256').update(code).digest(),createHash('sha256').update(process.env.PED_AI_ACCESS_CODE).digest())}
 function originAllowed(origin,req){
  // Browser-verified Fetch Metadata is the primary same-origin signal.
@@ -57,7 +57,7 @@ export default async function handler(req,res){
  if(req.method==='GET')return send(res,200,{enabled:isConfigured()});
  if(req.method!=='POST'){res.setHeader('Allow','GET, POST');return send(res,405,{error:'Metodo non consentito'})}
  if(!originAllowed(req.headers.origin,req))return send(res,403,{error:'Origine non autorizzata'});
- if(!isConfigured())return send(res,503,{error:'Generazione AI non ancora configurata su Vercel'});
+ if(!isConfigured())return send(res,503,{error:'OpenRouter non ancora configurato su Vercel: aggiungi OPENROUTER_API_KEY'});
  if(Number(req.headers['content-length']||0)>12000)return send(res,413,{error:'Richiesta troppo grande'});
  if(!validCode(req.headers['x-ped-ai-code']))return send(res,401,{error:'Codice di accesso AI non valido'});
  const input=validate(req.body);if(!input)return send(res,400,{error:'Seleziona una categoria della repository e da 4 a 10 Content'});
@@ -77,21 +77,21 @@ export default async function handler(req,res){
  'I titoli devono essere diversi da quelli già presenti. Rispondi soltanto nel JSON dello schema.'
  ].join('\n');
  try{
-  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,store:false,reasoning:{effort:'none'},max_output_tokens:18000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,category,focusTopic:topic?.title||null,knowledgeBase:examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(115000)});
+  const response=await fetch('https://openrouter.ai/api/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENROUTER_API_KEY,'Content-Type':'application/json','HTTP-Referer':'https://primo-ped.vercel.app','X-Title':'PRIMO PED'},body:JSON.stringify({model:MODEL,store:false,max_output_tokens:12000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,category,focusTopic:topic?.title||null,knowledgeBase:examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(115000)});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){
-   const code=String(data?.error?.code||'');
-   console.error('OpenAI request status',response.status,code||'unknown');
+   const code=String(data?.error?.code||data?.error?.metadata?.code||'');
+   console.error('OpenRouter request status',response.status,code||'unknown');
    if(code==='credit_balance_exhausted'||code==='insufficient_quota'||code==='billing_hard_limit_reached'){
-    return send(res,402,{error:'Credito API OpenAI esaurito. Apri OpenAI Platform → Billing, aggiungi credito o verifica il limite di spesa del progetto. Poi riprova.'});
+    return send(res,402,{error:'La quota gratuita OpenRouter è esaurita o non disponibile. Non è necessario acquistare credito: riprova quando si rinnova il limite.'});
    }
-   if(response.status===429){
-    return send(res,429,{error:'OpenAI sta limitando temporaneamente le richieste. Attendi e riprova.'});
+   if(response.status===429||response.status===503){
+    return send(res,429,{error:'OpenRouter gratuito ha raggiunto il limite di richieste (anche quelle fallite contano). Riprova più tardi o domani.'});
    }
-   if(response.status===401)return send(res,502,{error:'Chiave API OpenAI non valida: verifica OPENAI_API_KEY su Vercel.'});
-   return send(res,502,{error:'Generazione non riuscita. Controlla la configurazione OpenAI e riprova.'});
+   if(response.status===401)return send(res,502,{error:'Chiave API OpenRouter non valida: verifica OPENROUTER_API_KEY su Vercel.'});
+   return send(res,502,{error:'OpenRouter non è riuscito a generare il PED. Verifica la chiave e riprova.'});
   }
   const contents=cleanContents(outputText(data),count,existingTitles);
-  return send(res,200,{contents,category,focus:topic?.title||null,model:MODEL});
- }catch(e){console.error('PED generation failed',e.message);return send(res,502,{error:'Generazione non completata. Riprova con meno Content.'})}
+  return send(res,200,{contents,category,focus:topic?.title||null,model:data.model||MODEL});
+ }catch(e){console.error('PED generation failed',e.message);return send(res,502,{error:'Il modello gratuito non ha completato il PED. Prova con 4 Content e riprova.'})}
 }
