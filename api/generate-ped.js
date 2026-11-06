@@ -79,7 +79,18 @@ export default async function handler(req,res){
  try{
   const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,store:false,reasoning:{effort:'none'},max_output_tokens:18000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,category,focusTopic:topic?.title||null,knowledgeBase:examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(115000)});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok){console.error('OpenAI request status',response.status,data?.error?.code||'unknown');return send(res,response.status===429?429:502,{error:response.status===429?'Limite OpenAI raggiunto':'Generazione non riuscita. Verifica la configurazione API e riprova.'})}
+  if(!response.ok){
+   const code=String(data?.error?.code||'');
+   console.error('OpenAI request status',response.status,code||'unknown');
+   if(code==='credit_balance_exhausted'||code==='insufficient_quota'||code==='billing_hard_limit_reached'){
+    return send(res,402,{error:'Credito API OpenAI esaurito. Apri OpenAI Platform → Billing, aggiungi credito o verifica il limite di spesa del progetto. Poi riprova.'});
+   }
+   if(response.status===429){
+    return send(res,429,{error:'OpenAI sta limitando temporaneamente le richieste. Attendi e riprova.'});
+   }
+   if(response.status===401)return send(res,502,{error:'Chiave API OpenAI non valida: verifica OPENAI_API_KEY su Vercel.'});
+   return send(res,502,{error:'Generazione non riuscita. Controlla la configurazione OpenAI e riprova.'});
+  }
   const contents=cleanContents(outputText(data),count,existingTitles);
   return send(res,200,{contents,category,focus:topic?.title||null,model:MODEL});
  }catch(e){console.error('PED generation failed',e.message);return send(res,502,{error:'Generazione non completata. Riprova con meno Content.'})}
