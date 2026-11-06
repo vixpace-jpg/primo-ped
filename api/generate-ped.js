@@ -62,6 +62,11 @@ function outputText(data){
 const clip=(s,n)=>typeof s==='string'?s.trim().slice(0,n):'';
 function cleanContents(data,count,existing){if(!data||!Array.isArray(data.contents)||data.contents.length!==count)throw Error('Invalid response count');const titles=new Set(existing.map(norm));return data.contents.map(c=>{if(!c||!['post','story','carousel'].includes(c.format))throw Error('Invalid format');const result={title:clip(c.title,140),headline:clip(c.headline,250),subhead:clip(c.subhead,250),body:clip(c.body,3000),other:clip(c.other,2000),caption:clip(c.caption,5500),format:c.format,slides:Array.isArray(c.slides)?c.slides.slice(0,8).map(sl=>({headline:clip(sl.headline,250),subhead:clip(sl.subhead,250),body:clip(sl.body,1500)})):[]};if(!result.title||!result.headline||!result.body||result.caption.length<250||titles.has(norm(result.title)))throw Error('Missing or duplicated content');if(c.format==='carousel'&&(result.slides.length<3||result.slides.some(x=>!x.headline)))throw Error('Invalid carousel slides');titles.add(norm(result.title));return result})}
 export default async function handler(req,res){
+ // AI deliberately disabled while PRIMO PED runs only on repository content.
+ // Keep the route for a possible future reactivation, without outbound API calls.
+ if(req.method==='GET')return send(res,200,{enabled:false});
+ return send(res,503,{error:'Generazione AI temporaneamente disattivata. Usa Crea PED con la repository.'});
+ /*
  if(req.method==='GET')return send(res,200,{enabled:isConfigured()});
  if(req.method!=='POST'){res.setHeader('Allow','GET, POST');return send(res,405,{error:'Metodo non consentito'})}
  if(!originAllowed(req.headers.origin,req))return send(res,403,{error:'Origine non autorizzata'});
@@ -107,4 +112,5 @@ export default async function handler(req,res){
   const reason=/JSON incompleto|interrotto|non ha restituito testo/.test(e.message)?e.message:'Il modello gratuito non ha completato la generazione. Prova con 2 Content.';
   return send(res,502,{error:reason});
  }
+ */
 }
