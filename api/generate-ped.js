@@ -17,16 +17,15 @@ function originAllowed(origin,req){
  let currentHost='';
  try{currentHost=new URL('https://'+host).host}catch{return false}
  const fixed=new Set(['primo-ped.vercel.app','primo-ped-vpace-9250.vercel.app','primo-ped-git-main-vpace-9250.vercel.app']);
- const knownDeployment=/^primo-[a-z0-9]+-vpace-9250\.vercel\.app$/i.test(currentHost);
  const configuredOrigin=(()=>{try{return process.env.PED_ALLOWED_ORIGIN?new URL(process.env.PED_ALLOWED_ORIGIN).origin:null}catch{return null}})();
  const sameHostOrigin=typeof origin==='string'&&origin==='https://'+currentHost;
  const configured=typeof origin==='string'&&configuredOrigin===origin;
- const fixedOrigin=typeof origin==='string'&&fixed.has(new URL(origin).hostname);
- if(site==='same-origin'&&(!origin||sameHostOrigin||fixedOrigin||configured))return true;
+ const fixedOrigin=(()=>{try{return typeof origin==='string'&&new URL(origin).protocol==='https:'&&fixed.has(new URL(origin).hostname)}catch{return false}})();
+ if(site==='same-origin'&&(sameHostOrigin||fixedOrigin||configured))return true;
  if(origin&&site!=='none'){
   try{
    const source=new URL(origin);
-   if(source.protocol==='https:'&&(source.hostname===currentHost||fixed.has(source.hostname)||knownDeployment&&source.hostname===currentHost||configured))return true;
+   if(source.protocol==='https:'&&(source.hostname===currentHost||fixed.has(source.hostname)||configured))return true;
   }catch{return false}
  }
  // For browsers omitting Origin, require an explicit matching referrer plus
