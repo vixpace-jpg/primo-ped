@@ -1,0 +1,10 @@
+{
+  "name": "primo-ped",
+  "private": true,
+  "version": "2.1.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test"
+  }
+}
