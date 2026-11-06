@@ -79,3 +79,13 @@ test('Fetch Metadata ammette il progetto stesso, anche da URL di deploy, e blocc
  await handler({method:'POST',headers:{origin:'https://attacker.example',host:'primo-ped.vercel.app','sec-fetch-site':'cross-site'},body:{}},res);
  assert.equal(res.statusCode,403);
 });
+
+test('I modelli gratuiti supportano piccoli batch e segnalano JSON incompleto',()=>{
+ assert.match(api,/!\[2,4,6,8,10\]\.includes\(count\)/);
+ assert.match(api,/JSON incompleto: prova a generare 2 Content/);
+ assert.match(api,/AbortSignal\.timeout\(70000\)/);
+ const index=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.match(index,/<option value="2" selected>2<\/option>/);
+ assert.match(index,/setTimeout\(\(\)=>controller\.abort\(\),78000\)/);
+ assert.match(index,/finally\{btn\.disabled=false;btn\.innerHTML=oldLabel\}/);
+});
