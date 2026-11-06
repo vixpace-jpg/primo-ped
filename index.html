@@ -241,7 +241,9 @@ async function loadRepositoryThemes(){
   const previous=select.value;
   const categories=[...new Set(repositoryThemes.map(t=>t.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'it'));
   select.innerHTML='<option value="">Seleziona categoria…</option>'+categories.map(c=>'<option value="'+escapeHTML(c)+'">'+escapeHTML(c)+'</option>').join('');
-  if(categories.includes(previous))select.value=previous;
+  const requested=new URLSearchParams(location.search).get('pedCategory');
+  if(requested&&categories.includes(requested))select.value=requested;
+  else if(categories.includes(previous))select.value=previous;
   else if(activeTheme()?.category&&categories.includes(activeTheme().category))select.value=activeTheme().category;
  }catch(error){
   repositoryThemesStatus='error';
@@ -310,31 +312,6 @@ function setupThemeSearch(){
  $('#themeResults').addEventListener('click',e=>{const option=e.target.closest('[data-theme-option]');if(option)chooseTheme(option.dataset.themeOption)});
  document.addEventListener('pointerdown',e=>{if(themeSearchOpen&&!picker.contains(e.target))closeThemeSearch()});
  loadRepositoryThemes();
-}
-const pedCategoryInsight={"Igiene orale e prevenzione":"La prevenzione funziona soprattutto quando diventa un gesto sostenibile, non un insieme di regole impossibili da rispettare. La qualità della pulizia dipende dalle zone raggiunte, dal tempo dedicato e dalla continuità. Un controllo con l’igienista può aiutare a individuare i punti che vengono trascurati e a correggere la tecnica senza complicare la routine.","Parodontologia e gengive":"Le gengive fanno parte del sistema che sostiene i denti: per questo non bisogna considerarle un semplice dettaglio estetico. Molte alterazioni iniziano con segnali lievi o intermittenti. La valutazione parodontale serve a distinguere una condizione superficiale da un problema dei tessuti più profondi e a stabilire un percorso di cura e mantenimento.","Implantologia dentale":"Il percorso implantare non si esaurisce il giorno dell’intervento. Prima vengono raccolte informazioni su osso, denti e gengive; dopo si controllano guarigione, funzione e igiene. Il risultato va interpretato nel tempo, anche in relazione alle condizioni di salute e alle abitudini della persona. Per questo ogni progetto riabilitativo è individuale.","Ortodonzia trasparente":"La trasparenza è una caratteristica visibile degli allineatori, ma non racconta tutta la terapia. Il movimento dentale va studiato e monitorato: ogni mascherina è una fase di un percorso clinico. La collaborazione quotidiana e la corretta gestione del dispositivo sono importanti tanto quanto la sua progettazione iniziale.","Ortodonzia tradizionale":"L’ortodonzia non riguarda soltanto l’aspetto dei denti nelle fotografie. L’ortodontista osserva anche i contatti tra le arcate, i movimenti necessari e, per i pazienti in crescita, lo sviluppo delle strutture ossee. Il dispositivo scelto è uno strumento per raggiungere un obiettivo clinico, non il punto di partenza della decisione.","Odontoiatria pediatrica":"Nei bambini, le abitudini quotidiane e lo sviluppo dei denti cambiano rapidamente. Un approccio di prevenzione efficace coinvolge anche gli adulti, che possono aiutare a trasformare spazzolamento e controlli in gesti familiari. È utile spiegare ogni passaggio con semplicità, senza spaventare e senza aspettare che compaia un problema.","Estetica dentale e sbiancamento":"Un sorriso armonioso non coincide necessariamente con un colore molto chiaro o con denti tutti uguali. Prima di proporre un trattamento estetico, il professionista valuta salute, proporzioni, materiali già presenti e desideri della persona. Anche il mantenimento va considerato fin dall’inizio: conoscere limiti e possibilità aiuta a fare scelte consapevoli.","Conservativa ed endodonzia":"Conservare un dente naturale, quando clinicamente possibile, richiede di conoscere la causa del danno e la quantità di struttura ancora disponibile. Una macchia, una sensibilità o un dolore non descrivono da soli la profondità del problema. L’esame clinico e gli eventuali approfondimenti aiutano a distinguere una cura semplice da un intervento più articolato.","Chirurgia orale":"Ogni procedura chirurgica comincia molto prima dell’intervento. La raccolta delle informazioni mediche, gli esami indicati e la spiegazione di benefici, alternative e possibili rischi sono parte della cura. Dopo, le istruzioni di recupero vanno personalizzate: ciò che è normale per una procedura può non esserlo per un’altra.","Protesi e riabilitazione":"La riabilitazione orale cerca un equilibrio tra estetica, funzione e possibilità di mantenimento. Non basta valutare il singolo dente da sostituire: contano anche i denti vicini, la stabilità dei tessuti e il modo in cui le arcate lavorano insieme. Per questo le alternative devono essere spiegate con attenzione, senza presentare una soluzione come universalmente migliore.","Diagnostica e prima visita":"Una buona diagnosi nasce dall’ascolto oltre che dall’osservazione. Abitudini, sintomi, precedenti trattamenti e aspettative aiutano a interpretare ciò che emerge durante la visita. Gli approfondimenti strumentali si scelgono quando portano informazioni utili. Il piano di cura, se necessario, dovrebbe essere comprensibile e discusso insieme al paziente.","Falsi miti e vita quotidiana":"Molti comportamenti che mettono alla prova i denti non sembrano importanti perché avvengono in pochi secondi, tutti i giorni. Proprio la ripetizione può renderli rilevanti. Conoscere i meccanismi dietro un’abitudine aiuta a scegliere cosa cambiare, evitando rimedi improvvisati o promesse miracolose."};
-
-function buildPedContentFromTopic(topic,existingPosts){
- const insight=pedCategoryInsight[topic.category]||'';
- const caption=[
-  topic.hook,'',topic.explanation,'',topic.advice,'',insight,'',
-  'Quando si parla di salute orale, è importante distinguere le abitudini utili dalle soluzioni che possono sembrare immediate ma non tengono conto della situazione della singola persona. Anche quando due pazienti descrivono lo stesso sintomo o lo stesso obiettivo, le cause e le esigenze possono essere diverse.','',
-  'Per questo osservare i segnali, mantenere una routine di igiene consapevole e chiedere un parere professionale quando necessario è più utile che affidarsi a consigli generici trovati online. Una valutazione odontoiatrica permette di capire quali interventi siano realmente indicati e quali, invece, non servono.','',
-  'Vuoi approfondire questo argomento e capire cosa significa per la tua salute orale? Parlane con il tuo dentista e prenota una visita di controllo presso un Centro Dentistico Primo.'
- ].filter((v,i)=>v!==undefined).join('\n');
- const date=nextContentDate(state.selectedMonth,existingPosts);
- const slides=[
-  {headline:topic.hook,subhead:'',body:''},
-  {headline:'Cosa devi sapere',subhead:'',body:topic.explanation},
-  {headline:'Il consiglio',subhead:'',body:topic.advice},
-  {headline:'La tua salute orale conta',subhead:'',body:'Ogni situazione richiede una valutazione personalizzata.'},
-  {headline:'Hai ancora dubbi?',subhead:'',body:'Chiedi al tuo dentista. Prenota una visita di controllo.'}
- ];
- return {
-  id:uid(),libraryTopicId:topic.id,date,title:topic.title,headline:topic.hook,subhead:topic.category,
-  body:topic.explanation,other:topic.advice,caption,captionSaved:false,worldDay:false,refs:[],
-  types:[['carousel','story'].includes(topic.format)?topic.format:'post'],
-  ...(topic.format==='carousel'?{slides:slides.map(x=>({...x,id:uid()}))}:{})
- };
 }
 let pedAIAvailable=null;
 async function checkPEDAIStatus(){
