@@ -23,7 +23,7 @@ test('Azioni e formati compatibili', () => {
   for (const id of ['addContent','resetMonth','themeSelect','loadThemeButton','generate','deliver','exportProject','importProject']) {
     assert.match(html,new RegExp('id="'+id+'"'));
   }
-  assert.match(js, /\$\('#generate'\).addEventListener\('click',openThemeBuilder\)/);
+  assert.match(js, /\$\('#generate'\).addEventListener\('click',createPedFromSelectedTheme\)/);
   assert.match(js, /ped-studio-theme-v1/);
   assert.match(js, /ped-studio-v2/);
   assert.match(js, /word\/document.xml/);
@@ -44,4 +44,19 @@ test('La ricerca temi usa la repository editoriale completa, senza prepopolare l
   assert.ok(hits.length>0,'Nessun suggerimento per '+query);
  }
  assert.ok(data.contents.every(t=>t.title&&t.category));
+});
+
+test('Crea PED compila Content dal tema selezionato senza duplicare quelli esistenti',()=>{
+ assert.match(html,/id="generate"[^>]*>[\\s\\S]*?Crea PED<\\/button>/);
+ assert.match(js,/function createPedFromSelectedTheme\\(\\)/);
+ assert.match(js,/function buildPedContentFromTopic\\(topic,existingPosts\\)/);
+ assert.match(js,/libraryTopicId:topic\\.id/);
+ assert.match(js,/topic\\.format==='carousel'/);
+ assert.match(js,/usedIds\\.has\\(t\\.id\\)/);
+ assert.match(js,/usedTitles\\.has\\(norm\\(t\\.title\\)\\)/);
+ assert.doesNotMatch(js,/\\$\\('#generate'\\)\\.addEventListener\\('click',openThemeBuilder\\)/);
+ const data=JSON.parse(readFileSync(new URL('../content-library.json',import.meta.url),'utf8'));
+ const topics=data.contents.filter(t=>t.category===data.contents[0].category);
+ assert.ok(topics.length>=2);
+ assert.ok(topics.every(t=>t.hook&&t.explanation&&t.advice&&t.format));
 });
