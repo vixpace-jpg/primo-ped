@@ -41,7 +41,7 @@ function validate(body){
  if(!body||typeof body!=='object'||Array.isArray(body))return null;
  const {category,topicId='',month,count,tone,existingTitles}=body;
  if(typeof category!=='string'||category.length>100||typeof topicId!=='string'||topicId.length>80||
- !/^\d{4}-(0[1-9]|1[0-2])$/.test(month||'')||![4,6,8,10].includes(count)||
+ !/^\d{4}-(0[1-9]|1[0-2])$/.test(month||'')||![2,4,6,8,10].includes(count)||
  !['primo','informativo','audace'].includes(tone)||!Array.isArray(existingTitles)||
  existingTitles.length>50||existingTitles.some(x=>typeof x!=='string'||x.length>150))return null;
  const categoryMatch=library.find(x=>norm(x.category)===norm(category));
@@ -50,7 +50,15 @@ function validate(body){
  if(topicId&&!topic)return null;
  return {category:categoryMatch.category,topic,month,count,tone,existingTitles};
 }
-function outputText(data){if(data.error||data.status==='incomplete')throw Error('Incomplete output');const blocks=(data.output||[]).flatMap(x=>x.content||[]);if(blocks.some(x=>x.type==='refusal'))throw Error('Model refusal');return JSON.parse(blocks.filter(x=>x.type==='output_text').map(x=>x.text).join(''))}
+function outputText(data){
+ if(data.error||data.status==='incomplete')throw Error('Il modello gratuito ha interrotto la risposta');
+ const blocks=(data.output||[]).flatMap(x=>x.content||[]);
+ if(blocks.some(x=>x.type==='refusal'))throw Error('Il modello ha rifiutato la generazione');
+ const raw=blocks.filter(x=>x.type==='output_text').map(x=>x.text).join('');
+ if(!raw.trim())throw Error('Il modello gratuito non ha restituito testo');
+ try{return JSON.parse(raw)}
+ catch(e){throw Error('Il modello gratuito ha restituito un JSON incompleto: prova a generare 2 Content')}
+}
 const clip=(s,n)=>typeof s==='string'?s.trim().slice(0,n):'';
 function cleanContents(data,count,existing){if(!data||!Array.isArray(data.contents)||data.contents.length!==count)throw Error('Invalid response count');const titles=new Set(existing.map(norm));return data.contents.map(c=>{if(!c||!['post','story','carousel'].includes(c.format))throw Error('Invalid format');const result={title:clip(c.title,140),headline:clip(c.headline,250),subhead:clip(c.subhead,250),body:clip(c.body,3000),other:clip(c.other,2000),caption:clip(c.caption,5500),format:c.format,slides:Array.isArray(c.slides)?c.slides.slice(0,8).map(sl=>({headline:clip(sl.headline,250),subhead:clip(sl.subhead,250),body:clip(sl.body,1500)})):[]};if(!result.title||!result.headline||!result.body||result.caption.length<250||titles.has(norm(result.title)))throw Error('Missing or duplicated content');if(c.format==='carousel'&&(result.slides.length<3||result.slides.some(x=>!x.headline)))throw Error('Invalid carousel slides');titles.add(norm(result.title));return result})}
 export default async function handler(req,res){
@@ -60,7 +68,7 @@ export default async function handler(req,res){
  if(!isConfigured())return send(res,503,{error:'OpenRouter non ancora configurato su Vercel: aggiungi OPENROUTER_API_KEY'});
  if(Number(req.headers['content-length']||0)>12000)return send(res,413,{error:'Richiesta troppo grande'});
  if(!validCode(req.headers['x-ped-ai-code']))return send(res,401,{error:'Codice di accesso AI non valido'});
- const input=validate(req.body);if(!input)return send(res,400,{error:'Seleziona una categoria della repository e da 4 a 10 Content'});
+ const input=validate(req.body);if(!input)return send(res,400,{error:'Seleziona una categoria della repository e da 2 a 10 Content'});
  try{if(!await allowQuota(req))return send(res,429,{error:'Limite di generazioni raggiunto. Riprova più tardi.'})}catch(e){console.error('PED rate limiter unavailable');return send(res,503,{error:'Protezione temporaneamente non disponibile'})}
  const {category,topic,month,count,tone,existingTitles}=input;
  const categoryEntries=library.filter(x=>x.category===category);
@@ -69,15 +77,15 @@ export default async function handler(req,res){
  'Sei copywriter senior per Centri Dentistici Primo. Genera un piano editoriale odontoiatrico in italiano, utile, accurato, originale.',
  'La categoria scelta determina il PED. Tratta la repository fornita come KNOWLEDGE BASE editoriale e scegli autonomamente sotto-temi, angoli diversi, falsi miti e consigli. Un eventuale focus indica una preferenza e non un testo da replicare.',
  'Leggi la knowledge base per capirne lessico, rigore clinico, struttura e stile, poi elabora contenuti originali: non copiare hook, titoli o caption. Non introdurre dati medici non supportati dalla knowledge base.',
- 'Tono richiesto: '+tone+'. Usa un tono Primo: chiaro, autorevole, accessibile, non enfatico. Caption più lunghe e argomentate, circa 900–1500 caratteri, 3–6 paragrafi, hook iniziale e conclusione sobria.',
+ 'Tono richiesto: '+tone+'. Usa un tono Primo: chiaro, autorevole, accessibile, non enfatico. Caption più lunghe e argomentate, circa 650–1000 caratteri, 3–6 paragrafi, hook iniziale e conclusione sobria.',
  'Per ogni Content produci titolo, headline, subhead, testo informativo body, approfondimento other, caption completa e format.',
- 'Distribuisci formati post, story e carousel. Per i carousel scrivi 4–6 slide (headline, subhead, body); negli altri formati slides vuoto.',
+ 'Distribuisci formati post, story e carousel. Per i carousel scrivi 3–4 slide (headline, subhead, body); negli altri formati slides vuoto.',
  'Evita promesse di risultati, garanzie di efficacia, diagnosi individuali, prezzi, omaggi, gratis/gratuito/free, superlativi sanitari e claim non comprovati.',
  'Raccomanda una valutazione professionale quando appropriato. Non inventare dati clinici o statistiche.',
  'I titoli devono essere diversi da quelli già presenti. Rispondi soltanto nel JSON dello schema.'
  ].join('\n');
  try{
-  const response=await fetch('https://openrouter.ai/api/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENROUTER_API_KEY,'Content-Type':'application/json','HTTP-Referer':'https://primo-ped.vercel.app','X-Title':'PRIMO PED'},body:JSON.stringify({model:MODEL,store:false,max_output_tokens:12000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,category,focusTopic:topic?.title||null,knowledgeBase:examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(115000)});
+  const response=await fetch('https://openrouter.ai/api/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENROUTER_API_KEY,'Content-Type':'application/json','HTTP-Referer':'https://primo-ped.vercel.app','X-Title':'PRIMO PED'},body:JSON.stringify({model:MODEL,store:false,max_output_tokens:9000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,category,focusTopic:topic?.title||null,knowledgeBase:examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(70000)});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){
    const code=String(data?.error?.code||data?.error?.metadata?.code||'');
@@ -93,5 +101,10 @@ export default async function handler(req,res){
   }
   const contents=cleanContents(outputText(data),count,existingTitles);
   return send(res,200,{contents,category,focus:topic?.title||null,model:data.model||MODEL});
- }catch(e){console.error('PED generation failed',e.message);return send(res,502,{error:'Il modello gratuito non ha completato il PED. Prova con 4 Content e riprova.'})}
+ }catch(e){
+  console.error('PED generation failed',e.message);
+  if(e.name==='TimeoutError'||e.name==='AbortError')return send(res,504,{error:'OpenRouter non ha risposto entro 70 secondi. Puoi riprovare con 2 Content.'});
+  const reason=/JSON incompleto|interrotto|non ha restituito testo/.test(e.message)?e.message:'Il modello gratuito non ha completato la generazione. Prova con 2 Content.';
+  return send(res,502,{error:reason});
+ }
 }
