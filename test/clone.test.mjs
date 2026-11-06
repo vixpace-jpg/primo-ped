@@ -47,14 +47,14 @@ test('La ricerca temi usa la repository editoriale completa, senza prepopolare l
 });
 
 test('Crea PED compila Content dal tema selezionato senza duplicare quelli esistenti',()=>{
- assert.match(html,/id="generate"[^>]*>[\\s\\S]*?Crea PED<\\/button>/);
- assert.match(js,/function createPedFromSelectedTheme\\(\\)/);
- assert.match(js,/function buildPedContentFromTopic\\(topic,existingPosts\\)/);
- assert.match(js,/libraryTopicId:topic\\.id/);
- assert.match(js,/topic\\.format==='carousel'/);
- assert.match(js,/usedIds\\.has\\(t\\.id\\)/);
- assert.match(js,/usedTitles\\.has\\(norm\\(t\\.title\\)\\)/);
- assert.doesNotMatch(js,/\\$\\('#generate'\\)\\.addEventListener\\('click',openThemeBuilder\\)/);
+ assert.match(html,/id="generate"[^>]*>[\s\S]*?Crea PED<\/button>/);
+ assert.match(js,/function createPedFromSelectedTheme\(\)/);
+ assert.match(js,/function buildPedContentFromTopic\(topic,existingPosts\)/);
+ assert.match(js,/libraryTopicId:topic\.id/);
+ assert.match(js,/topic\.format==='carousel'/);
+ assert.match(js,/usedIds\.has\(t\.id\)/);
+ assert.match(js,/usedTitles\.has\(norm\(t\.title\)\)/);
+ assert.doesNotMatch(js,/\$\('#generate'\)\.addEventListener\('click',openThemeBuilder\)/);
  const data=JSON.parse(readFileSync(new URL('../content-library.json',import.meta.url),'utf8'));
  const topics=data.contents.filter(t=>t.category===data.contents[0].category);
  assert.ok(topics.length>=2);
