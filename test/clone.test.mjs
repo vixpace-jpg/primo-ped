@@ -46,23 +46,20 @@ test('La ricerca temi usa la repository editoriale completa, senza prepopolare l
  assert.ok(data.contents.every(t=>t.title&&t.category));
 });
 
-test('Crea PED usa OpenAI e la categoria come knowledge base, non copia gli esempi',()=>{
+test('Crea PED è basato sulla repository, AI disattivata',()=>{
  assert.match(html,/id="generate"[^>]*>[\s\S]*?Crea PED<\/button>/);
- assert.match(html,/id="pedAICategory"/);
- assert.match(html,/id="pedAICount"/);
- assert.match(html,/id="pedAITone"/);
- assert.match(html,/id="pedAIAccessCode" type="password"/);
- assert.match(js,/fetch\('\/api\/generate-ped'/);
- assert.match(js,/body:JSON\.stringify\(\{category,topicId:/);
+ assert.match(html,/Crea PED con l'AI<\/button>/);
+ assert.match(html,/disabled aria-disabled="true"/);
  assert.match(js,/function createPedFromSelectedTheme\(\)/);
- assert.match(js,/newPosts\.push\(post\)/);
- assert.match(js,/m\.posts\.push\(\.\.\.newPosts\)/);
- assert.match(js,/new URLSearchParams\(location\.search\)\.get\('pedCategory'\)/);
- assert.doesNotMatch(js,/function buildPedContentFromTopic/);
- assert.doesNotMatch(js,/\$\('#generate'\)\.addEventListener\('click',openThemeBuilder\)/);
+ assert.match(js,/function buildPedContentFromTopic\(topic,existingPosts\)/);
+ assert.match(js,/libraryTopicId:topic\.id/);
+ assert.match(js,/usedIds\.has\(t\.id\)/);
+ assert.match(js,/usedTitles\.has\(norm\(t\.title\)\)/);
+ assert.doesNotMatch(js,/fetch\('\/api\/generate-ped'/);
+ assert.doesNotMatch(html,/id="pedAICategory"|id="pedAIAccessCode"/);
  const repoPage=readFileSync(new URL('../repository.html',import.meta.url),'utf8');
- assert.match(repoPage,/Crea PED da categoria/);
- assert.doesNotMatch(repoPage,/function addItem\(/);
+ assert.match(repoPage,/function addItem\(/);
+ assert.match(repoPage,/data-add/);
 });
 
 test('La barra Reset mese non interrompe la renderizzazione e la selezione dei temi',()=>{
