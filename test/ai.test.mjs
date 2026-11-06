@@ -61,3 +61,18 @@ test('Origini Vercel ufficiali consentite, domini esterni rifiutati',async()=>{
  await handler({method:'POST',headers:{origin:'https://evil.example',host:'primo-ped.vercel.app'},body:{}},res);
  assert.equal(res.statusCode,403);
 });
+
+test('Fetch Metadata ammette il progetto stesso, anche da URL di deploy, e blocca le richieste cross-site',async()=>{
+ const variants=[
+  ['https://primo-ped.vercel.app','primo-ped.vercel.app'],
+  ['https://primo-new123-vpace-9250.vercel.app','primo-new123-vpace-9250.vercel.app']
+ ];
+ for(const [origin,host] of variants){
+  const res=response();
+  await handler({method:'POST',headers:{origin,host,'sec-fetch-site':'same-origin'},body:{}},res);
+  assert.notEqual(res.statusCode,403);
+ }
+ const res=response();
+ await handler({method:'POST',headers:{origin:'https://attacker.example',host:'primo-ped.vercel.app','sec-fetch-site':'cross-site'},body:{}},res);
+ assert.equal(res.statusCode,403);
+});
