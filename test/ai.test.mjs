@@ -44,3 +44,20 @@ test('Backend usa solo categorie della repository, JSON strutturato e secret ser
  assert.match(api,/await allowQuota\(req\)/);
  assert.doesNotMatch(api,/AIza[0-9A-Za-z_-]+|sk-proj-[0-9A-Za-z_-]+/);
 });
+
+test('Origini Vercel ufficiali consentite, domini esterni rifiutati',async()=>{
+ const allowed=[
+  ['https://primo-ped.vercel.app','primo-ped.vercel.app'],
+  ['https://primo-ped-vpace-9250.vercel.app','primo-ped-vpace-9250.vercel.app'],
+  ['https://primo-ped-git-main-vpace-9250.vercel.app','primo-ped-git-main-vpace-9250.vercel.app'],
+  ['https://primo-pmapvaz33-vpace-9250.vercel.app','primo-pmapvaz33-vpace-9250.vercel.app']
+ ];
+ for(const [origin,host] of allowed){
+  const res=response();
+  await handler({method:'POST',headers:{origin,host},body:{}},res);
+  assert.notEqual(res.statusCode,403,'Rifiutata origine valida '+origin);
+ }
+ const res=response();
+ await handler({method:'POST',headers:{origin:'https://evil.example',host:'primo-ped.vercel.app'},body:{}},res);
+ assert.equal(res.statusCode,403);
+});
