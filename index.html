@@ -336,6 +336,16 @@ function buildPedContentFromTopic(topic,existingPosts){
   ...(topic.format==='carousel'?{slides:slides.map(x=>({...x,id:uid()}))}:{})
  };
 }
+let pedAIAvailable=null;
+async function checkPEDAIStatus(){
+ try{
+  const response=await fetch('/api/generate-ped',{cache:'no-store'});
+  const data=await response.json();
+  pedAIAvailable=Boolean(response.ok&&data.enabled);
+  if(!pedAIAvailable)$('#pedAIHint').textContent='OpenAI in attesa di configurazione Vercel. La repository resta consultabile e l’editor funziona normalmente.';
+  else $('#pedAIHint').textContent='Knowledge base pronta: OpenAI scriverà nuovi Content, non copierà i testi della repository.';
+ }catch(e){pedAIAvailable=null;$('#pedAIHint').textContent='Impossibile verificare OpenAI. La generazione potrebbe non essere disponibile.'}
+}
 function paragraphHTML(text){
  return String(text||'').split(/\n\s*\n/).map(p=>'<p>'+escapeHTML(p.trim()).replace(/\n/g,'<br>')+'</p>').join('');
 }
@@ -343,6 +353,7 @@ async function createPedFromSelectedTheme(){
  const btn=$('#generate'),selected=activeTheme(),category=$('#pedAICategory').value;
  const code=$('#pedAIAccessCode').value.trim(),count=Number($('#pedAICount').value),tone=$('#pedAITone').value;
  if(!category){toast('Scegli una categoria prima di creare il PED.');$('#pedAICategory').focus();return}
+ if(pedAIAvailable===false){toast('OpenAI non ancora attiva: configura le variabili d’ambiente su Vercel.',5500);return}
  if(!code){toast('Inserisci il codice di accesso AI.');$('#pedAIAccessCode').focus();return}
  const m=month(),monthAtStart=state.selectedMonth,themeAtStart=m.themeId;
  if(m.posts.length&&!confirm('Aggiungere '+count+' nuovi Content AI al mese '+fullMonth(monthAtStart)+'? I Content esistenti resteranno invariati.'))return;
@@ -675,7 +686,7 @@ function readZip(bytes){let out=new Map(),pos=0,decoder=new TextDecoder();const 
 async function importProject(e){let file=e.target.files?.[0];e.target.value='';if(!file)return;if(file.size>100*1024*1024){toast('Progetto troppo grande (max 100 MB)');return}try{let bytes=new Uint8Array(await file.arrayBuffer()),archive=file.name.toLowerCase().endsWith('.zip')?readZip(bytes):new Map([['progetto.json',bytes]]);let data=archive.get('progetto.json');if(!data)throw Error('Manca progetto.json');let parsed=JSON.parse(new TextDecoder().decode(data));if(parsed.format!=='ped-studio-v2'||!parsed.state||!Array.isArray(parsed.state.themes)||!parsed.state.months||typeof parsed.state.months!=='object')throw Error('File progetto non valido');if(!confirm('Aprire questo progetto? Sostituirà i dati attualmente presenti nel browser. Prima salva una copia se vuoi conservarli.'))return;let incoming=parsed.state;for(let m of Object.values(incoming.months)){if(!m||!Array.isArray(m.posts))throw Error('Struttura del PED non valida');for(let p of m.posts){if(!p||typeof p.date!=='string'||!Array.isArray(p.refs))throw Error('Post non valido')}}for(let m of Object.values(incoming.months))for(let p of m.posts){for(const k of ['body','other','caption'])p[k]=sanitizeRich(p[k]);}
 for(let m of Object.values(incoming.months))for(let p of m.posts)for(let ref of p.refs){let content=archive.get('allegati/'+ref.id);if(content){let blob=new File([content],ref.name||'allegato',{type:ref.type||'application/octet-stream'});await putFile(ref.id,blob)}}state=incoming;ui.selected=0;save();renderChrome();renderPosts();renderCalendar();setView('posts');toast('Progetto importato e pronto da modificare')}catch(err){toast('Importazione non riuscita: '+err.message)}}
 window.addEventListener('resize',()=>{if(ui.view==='calendar')renderCalendar()});
-setupSettings();attachEvents();month();renderChrome();renderPosts();renderCalendar();setView(ui.view);
+setupSettings();attachEvents();month();renderChrome();renderPosts();renderCalendar();setView(ui.view);checkPEDAIStatus();
 // Nessuna modalità demo: il primo avvio rimane vuoto anche con ?demo=1.
 })();
 </script>
