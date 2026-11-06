@@ -7,7 +7,21 @@ const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLo
 const send=(res,status,object)=>res.status(status).setHeader('Cache-Control','no-store').setHeader('X-Content-Type-Options','nosniff').json(object);
 const isConfigured=()=>Boolean(process.env.OPENAI_API_KEY&&process.env.PED_AI_ACCESS_CODE&&process.env.UPSTASH_REDIS_REST_URL&&process.env.UPSTASH_REDIS_REST_TOKEN);
 function validCode(code){if(typeof code!=='string'||code.length>256||!code||!process.env.PED_AI_ACCESS_CODE)return false;return timingSafeEqual(createHash('sha256').update(code).digest(),createHash('sha256').update(process.env.PED_AI_ACCESS_CODE).digest())}
-function originAllowed(origin){const permitted=['https://primo-ped.vercel.app',process.env.PED_ALLOWED_ORIGIN];if(process.env.NODE_ENV!=='production')permitted.push('http://localhost:3000');return permitted.includes(origin)}
+function originAllowed(origin,req){
+ // Allow only the production hostname, verified Vercel project aliases and
+ // the exact deployment hostname currently serving the request.
+ const fixed=['primo-ped.vercel.app','primo-ped-vpace-9250.vercel.app','primo-ped-git-main-vpace-9250.vercel.app'];
+ const productionHost=/^primo-[a-z0-9]+-vpace-9250\.vercel\.app$/i;
+ const host=String(req.headers['x-forwarded-host']||req.headers.host||'').toLowerCase().split(',')[0].trim();
+ const url=process.env.VERCEL_URL||'';
+ const permitted=new Set(fixed.map(h=>'https://'+h));
+ if(productionHost.test(host))permitted.add('https://'+host);
+ if(productionHost.test(url))permitted.add('https://'+url);
+ if(process.env.PED_ALLOWED_ORIGIN){try{const extra=new URL(process.env.PED_ALLOWED_ORIGIN);if(extra.protocol==='https:')permitted.add(extra.origin)}catch{}}
+ if(process.env.NODE_ENV!=='production'){permitted.add('http://localhost:3000');permitted.add('http://localhost:3001')}
+ if(typeof origin!=='string'||origin==='null')return false;
+ try{return permitted.has(new URL(origin).origin)&&new URL(origin).origin===origin.replace(/\/$/,'')}catch{return false}
+}
 async function rateLimit(key,ttl){const script='local n=redis.call("INCR",KEYS[1]); if n==1 then redis.call("EXPIRE",KEYS[1],ARGV[1]) end; return n';const url=process.env.UPSTASH_REDIS_REST_URL.replace(/\/$/,'');const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.UPSTASH_REDIS_REST_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(['EVAL',script,'1',key,String(ttl)]),signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('rate limiter unavailable');const data=await response.json();if(data.error||!Number.isFinite(Number(data.result)))throw Error('rate limiter unavailable');return Number(data.result)}
 async function allowQuota(req){const ip=String(req.headers['x-vercel-forwarded-for']||req.headers['x-real-ip']||req.headers['x-forwarded-for']||'unknown').split(',')[0].slice(0,80);const id=createHash('sha256').update(ip).digest('hex').slice(0,20);const hour=Math.floor(Date.now()/3600000),day=Math.floor(Date.now()/86400000);const [client,total]=await Promise.all([rateLimit('ped:client:'+id+':'+hour,3700),rateLimit('ped:daily:'+day,90000)]);return client<=10&&total<=80}
 function validate(body){
@@ -29,7 +43,7 @@ function cleanContents(data,count,existing){if(!data||!Array.isArray(data.conten
 export default async function handler(req,res){
  if(req.method==='GET')return send(res,200,{enabled:isConfigured()});
  if(req.method!=='POST'){res.setHeader('Allow','GET, POST');return send(res,405,{error:'Metodo non consentito'})}
- if(!originAllowed(req.headers.origin))return send(res,403,{error:'Origine non autorizzata'});
+ if(!originAllowed(req.headers.origin,req))return send(res,403,{error:'Origine non autorizzata'});
  if(!isConfigured())return send(res,503,{error:'Generazione AI non ancora configurata su Vercel'});
  if(Number(req.headers['content-length']||0)>12000)return send(res,413,{error:'Richiesta troppo grande'});
  if(!validCode(req.headers['x-ped-ai-code']))return send(res,401,{error:'Codice di accesso AI non valido'});
