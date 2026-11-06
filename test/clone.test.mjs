@@ -60,3 +60,11 @@ test('Crea PED compila Content dal tema selezionato senza duplicare quelli esist
  assert.ok(topics.length>=2);
  assert.ok(topics.every(t=>t.hook&&t.explanation&&t.advice&&t.format));
 });
+
+test('La barra Reset mese non interrompe la renderizzazione e la selezione dei temi',()=>{
+ assert.doesNotMatch(js,/(?<!\$)\$\('#resetMonth,#resetMonthMobile'\)\.forEach/);
+ assert.match(js,/\$\$\('#resetMonth,#resetMonthMobile'\)\.forEach\(b=>b\.disabled/);
+ assert.match(js,/\$\$\('#resetMonth,#resetMonthMobile'\)\.forEach\(button=>button\.addEventListener/);
+ assert.match(js,/function chooseTheme\(id\)/);
+ assert.match(js,/renderThemeSearch\(\)/);
+});
