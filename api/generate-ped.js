@@ -10,7 +10,19 @@ function validCode(code){if(typeof code!=='string'||code.length>256||!code||!pro
 function originAllowed(origin){const permitted=['https://primo-ped.vercel.app',process.env.PED_ALLOWED_ORIGIN];if(process.env.NODE_ENV!=='production')permitted.push('http://localhost:3000');return permitted.includes(origin)}
 async function rateLimit(key,ttl){const script='local n=redis.call("INCR",KEYS[1]); if n==1 then redis.call("EXPIRE",KEYS[1],ARGV[1]) end; return n';const url=process.env.UPSTASH_REDIS_REST_URL.replace(/\/$/,'');const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.UPSTASH_REDIS_REST_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(['EVAL',script,'1',key,String(ttl)]),signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('rate limiter unavailable');const data=await response.json();if(data.error||!Number.isFinite(Number(data.result)))throw Error('rate limiter unavailable');return Number(data.result)}
 async function allowQuota(req){const ip=String(req.headers['x-vercel-forwarded-for']||req.headers['x-real-ip']||req.headers['x-forwarded-for']||'unknown').split(',')[0].slice(0,80);const id=createHash('sha256').update(ip).digest('hex').slice(0,20);const hour=Math.floor(Date.now()/3600000),day=Math.floor(Date.now()/86400000);const [client,total]=await Promise.all([rateLimit('ped:client:'+id+':'+hour,3700),rateLimit('ped:daily:'+day,90000)]);return client<=10&&total<=80}
-function validate(body){if(!body||typeof body!=='object'||Array.isArray(body))return null;const {topicId,month,count,tone,existingTitles}=body;if(typeof topicId!=='string'||topicId.length>80||!/^\d{4}-(0[1-9]|1[0-2])$/.test(month||'')||![4,6,8,10].includes(count)||!['primo','informativo','audace'].includes(tone)||!Array.isArray(existingTitles)||existingTitles.length>50||existingTitles.some(x=>typeof x!=='string'||x.length>150))return null;const topic=library.find(x=>x.id===topicId);return topic?{topic,month,count,tone,existingTitles}:null}
+function validate(body){
+ if(!body||typeof body!=='object'||Array.isArray(body))return null;
+ const {category,topicId='',month,count,tone,existingTitles}=body;
+ if(typeof category!=='string'||category.length>100||typeof topicId!=='string'||topicId.length>80||
+ !/^\d{4}-(0[1-9]|1[0-2])$/.test(month||'')||![4,6,8,10].includes(count)||
+ !['primo','informativo','audace'].includes(tone)||!Array.isArray(existingTitles)||
+ existingTitles.length>50||existingTitles.some(x=>typeof x!=='string'||x.length>150))return null;
+ const categoryMatch=library.find(x=>norm(x.category)===norm(category));
+ if(!categoryMatch)return null;
+ const topic=topicId?library.find(x=>x.id===topicId&&norm(x.category)===norm(categoryMatch.category)):null;
+ if(topicId&&!topic)return null;
+ return {category:categoryMatch.category,topic,month,count,tone,existingTitles};
+}
 function outputText(data){if(data.error||data.status==='incomplete')throw Error('Incomplete output');const blocks=(data.output||[]).flatMap(x=>x.content||[]);if(blocks.some(x=>x.type==='refusal'))throw Error('Model refusal');return JSON.parse(blocks.filter(x=>x.type==='output_text').map(x=>x.text).join(''))}
 const clip=(s,n)=>typeof s==='string'?s.trim().slice(0,n):'';
 function cleanContents(data,count,existing){if(!data||!Array.isArray(data.contents)||data.contents.length!==count)throw Error('Invalid response count');const titles=new Set(existing.map(norm));return data.contents.map(c=>{if(!c||!['post','story','carousel'].includes(c.format))throw Error('Invalid format');const result={title:clip(c.title,140),headline:clip(c.headline,250),subhead:clip(c.subhead,250),body:clip(c.body,3000),other:clip(c.other,2000),caption:clip(c.caption,5500),format:c.format,slides:Array.isArray(c.slides)?c.slides.slice(0,8).map(sl=>({headline:clip(sl.headline,250),subhead:clip(sl.subhead,250),body:clip(sl.body,1500)})):[]};if(!result.title||!result.headline||!result.body||result.caption.length<250||titles.has(norm(result.title)))throw Error('Missing or duplicated content');if(c.format==='carousel'&&(result.slides.length<3||result.slides.some(x=>!x.headline)))throw Error('Invalid carousel slides');titles.add(norm(result.title));return result})}
@@ -21,14 +33,15 @@ export default async function handler(req,res){
  if(!isConfigured())return send(res,503,{error:'Generazione AI non ancora configurata su Vercel'});
  if(Number(req.headers['content-length']||0)>12000)return send(res,413,{error:'Richiesta troppo grande'});
  if(!validCode(req.headers['x-ped-ai-code']))return send(res,401,{error:'Codice di accesso AI non valido'});
- const input=validate(req.body);if(!input)return send(res,400,{error:'Seleziona un tema della repository e da 4 a 10 Content'});
+ const input=validate(req.body);if(!input)return send(res,400,{error:'Seleziona una categoria della repository e da 4 a 10 Content'});
  try{if(!await allowQuota(req))return send(res,429,{error:'Limite di generazioni raggiunto. Riprova più tardi.'})}catch(e){console.error('PED rate limiter unavailable');return send(res,503,{error:'Protezione temporaneamente non disponibile'})}
- const {topic,month,count,tone,existingTitles}=input;
- const examples=[topic,...library.filter(x=>x.category===topic.category&&x.id!==topic.id)].slice(0,8).map(x=>({title:x.title,hook:x.hook,explanation:x.explanation,advice:x.advice,format:x.format}));
+ const {category,topic,month,count,tone,existingTitles}=input;
+ const categoryEntries=library.filter(x=>x.category===category);
+ const examples=(topic?[topic,...categoryEntries.filter(x=>x.id!==topic.id)]:categoryEntries).slice(0,10).map(x=>({title:x.title,hook:x.hook,explanation:x.explanation,advice:x.advice,format:x.format,rubric:x.rubric}));
  const instructions=[
  'Sei copywriter senior per Centri Dentistici Primo. Genera un piano editoriale odontoiatrico in italiano, utile, accurato, originale.',
- 'Il tema scelto è il centro dell’intero PED: proponi angoli diversi, domande, falsi miti, approfondimenti e consigli, evitando ripetizioni.',
- 'Usa gli esempi della repository soltanto come riferimenti stilistici e tematici, non copiarli letteralmente.',
+ 'La categoria scelta determina il PED. Tratta la repository fornita come KNOWLEDGE BASE editoriale e scegli autonomamente sotto-temi, angoli diversi, falsi miti e consigli. Un eventuale focus indica una preferenza e non un testo da replicare.',
+ 'Leggi la knowledge base per capirne lessico, rigore clinico, struttura e stile, poi elabora contenuti originali: non copiare hook, titoli o caption. Non introdurre dati medici non supportati dalla knowledge base.',
  'Tono richiesto: '+tone+'. Usa un tono Primo: chiaro, autorevole, accessibile, non enfatico. Caption più lunghe e argomentate, circa 900–1500 caratteri, 3–6 paragrafi, hook iniziale e conclusione sobria.',
  'Per ogni Content produci titolo, headline, subhead, testo informativo body, approfondimento other, caption completa e format.',
  'Distribuisci formati post, story e carousel. Per i carousel scrivi 4–6 slide (headline, subhead, body); negli altri formati slides vuoto.',
@@ -37,10 +50,10 @@ export default async function handler(req,res){
  'I titoli devono essere diversi da quelli già presenti. Rispondi soltanto nel JSON dello schema.'
  ].join('\n');
  try{
-  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,store:false,reasoning:{effort:'none'},max_output_tokens:18000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,selectedTheme:topic.title,category:topic.category,examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(115000)});
+  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,store:false,reasoning:{effort:'none'},max_output_tokens:18000,instructions,input:JSON.stringify({task:'Genera esattamente '+count+' Content originali',month,category,focusTopic:topic?.title||null,knowledgeBase:examples,existingTitles}),text:{format:{type:'json_schema',name:'primo_ped_content',strict:true,schema}}}),signal:AbortSignal.timeout(115000)});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){console.error('OpenAI request status',response.status,data?.error?.code||'unknown');return send(res,response.status===429?429:502,{error:response.status===429?'Limite OpenAI raggiunto':'Generazione non riuscita. Verifica la configurazione API e riprova.'})}
   const contents=cleanContents(outputText(data),count,existingTitles);
-  return send(res,200,{contents,theme:topic.title,model:MODEL});
+  return send(res,200,{contents,category,focus:topic?.title||null,model:MODEL});
  }catch(e){console.error('PED generation failed',e.message);return send(res,502,{error:'Generazione non completata. Riprova con meno Content.'})}
 }
