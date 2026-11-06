@@ -28,3 +28,20 @@ test('Azioni e formati compatibili', () => {
   assert.match(js, /ped-studio-v2/);
   assert.match(js, /word\/document.xml/);
 });
+
+test('La ricerca temi usa la repository editoriale completa, senza prepopolare lo stato',()=>{
+ const data=JSON.parse(readFileSync(new URL('../content-library.json',import.meta.url),'utf8'));
+ assert.equal(data.contents.length,60);
+ assert.equal(new Set(data.contents.map(t=>t.category)).size,12);
+ assert.match(js,/fetch\('\.\/content-library\.json'/);
+ assert.match(js,/repositoryThemes=payload\.contents/);
+ assert.match(js,/function availableThemeChoices\(\)/);
+ assert.match(js,/function chooseTheme\(id\)/);
+ assert.match(js,/state\.themes\.push\(found\)/);
+ const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').trim();
+ for(const query of ['impianti','ortodonzia','spazzolino','tartaro']){
+  const hits=data.contents.filter(t=>norm(t.title).includes(norm(query))||norm(t.category).includes(norm(query))||norm(t.rubric).includes(norm(query)));
+  assert.ok(hits.length>0,'Nessun suggerimento per '+query);
+ }
+ assert.ok(data.contents.every(t=>t.title&&t.category));
+});
