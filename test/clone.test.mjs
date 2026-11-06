@@ -69,3 +69,18 @@ test('La barra Reset mese non interrompe la renderizzazione e la selezione dei t
  assert.match(js,/function chooseTheme\(id\)/);
  assert.match(js,/renderThemeSearch\(\)/);
 });
+
+test('Link condivisibile avvia un workspace vuoto senza cancellare i progetti esistenti',()=>{
+ assert.match(html,/id="shareCleanLink"/);
+ assert.match(html,/id="shareCleanLinkMobile"/);
+ assert.match(html,/<symbol id="i-link"/);
+ assert.match(js,/launchParams\.get\('nuovo'\)==='1'/);
+ assert.match(js,/history\.replaceState\(null,'',launchUrl\.pathname\+launchUrl\.search\+launchUrl\.hash\)/);
+ assert.match(js,/launchUrl\.searchParams\.set\('workspace',uid\(\)\)/);
+ assert.match(js,/primo-ped-workspace-/);
+ assert.match(js,/localStorage\.getItem\(storageKey\)/);
+ assert.match(js,/localStorage\.setItem\(storageKey,JSON\.stringify\(state\)\)/);
+ assert.match(js,/url\.searchParams\.set\('nuovo','1'\)/);
+ assert.match(js,/\$\$\('#shareCleanLink,#shareCleanLinkMobile'\)\.forEach/);
+ assert.match(js,/function createPedFromSelectedTheme\(\)/);
+});
