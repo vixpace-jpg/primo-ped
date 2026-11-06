@@ -319,9 +319,9 @@ async function checkPEDAIStatus(){
   const response=await fetch('/api/generate-ped',{cache:'no-store'});
   const data=await response.json();
   pedAIAvailable=Boolean(response.ok&&data.enabled);
-  if(!pedAIAvailable)$('#pedAIHint').textContent='OpenAI in attesa di configurazione Vercel. La repository resta consultabile e l’editor funziona normalmente.';
-  else $('#pedAIHint').textContent='Knowledge base pronta: OpenAI scriverà nuovi Content, non copierà i testi della repository.';
- }catch(e){pedAIAvailable=null;$('#pedAIHint').textContent='Impossibile verificare OpenAI. La generazione potrebbe non essere disponibile.'}
+  if(!pedAIAvailable)$('#pedAIHint').textContent='OpenRouter gratuito in attesa di configurazione: aggiungi OPENROUTER_API_KEY su Vercel. Repository ed editor funzionano normalmente.';
+  else $('#pedAIHint').textContent='OpenRouter gratuito attivo: l’AI utilizza la knowledge base per scrivere Content nuovi, senza copiarli.';
+ }catch(e){pedAIAvailable=null;$('#pedAIHint').textContent='Impossibile verificare OpenRouter. La generazione potrebbe non essere disponibile.'}
 }
 function paragraphHTML(text){
  return String(text||'').split(/\n\s*\n/).map(p=>'<p>'+escapeHTML(p.trim()).replace(/\n/g,'<br>')+'</p>').join('');
@@ -330,7 +330,7 @@ async function createPedFromSelectedTheme(){
  const btn=$('#generate'),selected=activeTheme(),category=$('#pedAICategory').value;
  const code=$('#pedAIAccessCode').value.trim(),count=Number($('#pedAICount').value),tone=$('#pedAITone').value;
  if(!category){toast('Scegli una categoria prima di creare il PED.');$('#pedAICategory').focus();return}
- if(pedAIAvailable===false){toast('OpenAI non ancora attiva: configura le variabili d’ambiente su Vercel.',5500);return}
+ if(pedAIAvailable===false){toast('OpenRouter non ancora attivo: aggiungi OPENROUTER_API_KEY su Vercel.',5500);return}
  if(!code){toast('Inserisci il codice di accesso AI.');$('#pedAIAccessCode').focus();return}
  const m=month(),monthAtStart=state.selectedMonth,themeAtStart=m.themeId;
  if(m.posts.length&&!confirm('Aggiungere '+count+' nuovi Content AI al mese '+fullMonth(monthAtStart)+'? I Content esistenti resteranno invariati.'))return;
@@ -362,7 +362,7 @@ async function createPedFromSelectedTheme(){
   }
   const first=m.posts.length;m.posts.push(...newPosts);m.generatedTheme=category;ui.selected=first;
   $('#pedAIAccessCode').value='';save();renderPosts();renderCalendar();setView('posts');
-  toast('PED generato con OpenAI: '+newPosts.length+' Content originali da revisionare.',5500);
+  toast('PED generato con OpenRouter: '+newPosts.length+' Content originali da revisionare.',5500);
  }catch(error){console.error('Generazione AI:',error.message);toast(error.message,6200)}
  finally{btn.disabled=false;btn.innerHTML=oldLabel}
 }
