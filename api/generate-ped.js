@@ -8,19 +8,33 @@ const send=(res,status,object)=>res.status(status).setHeader('Cache-Control','no
 const isConfigured=()=>Boolean(process.env.OPENAI_API_KEY&&process.env.PED_AI_ACCESS_CODE&&process.env.UPSTASH_REDIS_REST_URL&&process.env.UPSTASH_REDIS_REST_TOKEN);
 function validCode(code){if(typeof code!=='string'||code.length>256||!code||!process.env.PED_AI_ACCESS_CODE)return false;return timingSafeEqual(createHash('sha256').update(code).digest(),createHash('sha256').update(process.env.PED_AI_ACCESS_CODE).digest())}
 function originAllowed(origin,req){
- // Allow only the production hostname, verified Vercel project aliases and
- // the exact deployment hostname currently serving the request.
- const fixed=['primo-ped.vercel.app','primo-ped-vpace-9250.vercel.app','primo-ped-git-main-vpace-9250.vercel.app'];
- const productionHost=/^primo-[a-z0-9]+-vpace-9250\.vercel\.app$/i;
- const host=String(req.headers['x-forwarded-host']||req.headers.host||'').toLowerCase().split(',')[0].trim();
- const url=process.env.VERCEL_URL||'';
- const permitted=new Set(fixed.map(h=>'https://'+h));
- if(productionHost.test(host))permitted.add('https://'+host);
- if(productionHost.test(url))permitted.add('https://'+url);
- if(process.env.PED_ALLOWED_ORIGIN){try{const extra=new URL(process.env.PED_ALLOWED_ORIGIN);if(extra.protocol==='https:')permitted.add(extra.origin)}catch{}}
- if(process.env.NODE_ENV!=='production'){permitted.add('http://localhost:3000');permitted.add('http://localhost:3001')}
- if(typeof origin!=='string'||origin==='null')return false;
- try{return permitted.has(new URL(origin).origin)&&new URL(origin).origin===origin.replace(/\/$/,'')}catch{return false}
+ // Browser-verified Fetch Metadata is the primary same-origin signal.
+ // It works for all project aliases, preview URLs, and custom domains.
+ // Cross-site browser requests never reach the billable OpenAI endpoint.
+ const site=String(req.headers['sec-fetch-site']||'').toLowerCase();
+ if(site==='cross-site')return false;
+ const host=String(req.headers['x-forwarded-host']||req.headers.host||'').split(',')[0].trim().toLowerCase();
+ let currentHost='';
+ try{currentHost=new URL('https://'+host).host}catch{return false}
+ const fixed=new Set(['primo-ped.vercel.app','primo-ped-vpace-9250.vercel.app','primo-ped-git-main-vpace-9250.vercel.app']);
+ const knownDeployment=/^primo-[a-z0-9]+-vpace-9250\.vercel\.app$/i.test(currentHost);
+ const configuredOrigin=(()=>{try{return process.env.PED_ALLOWED_ORIGIN?new URL(process.env.PED_ALLOWED_ORIGIN).origin:null}catch{return null}})();
+ const sameHostOrigin=typeof origin==='string'&&origin==='https://'+currentHost;
+ const configured=typeof origin==='string'&&configuredOrigin===origin;
+ const fixedOrigin=typeof origin==='string'&&fixed.has(new URL(origin).hostname);
+ if(site==='same-origin'&&(!origin||sameHostOrigin||fixedOrigin||configured))return true;
+ if(origin&&site!=='none'){
+  try{
+   const source=new URL(origin);
+   if(source.protocol==='https:'&&(source.hostname===currentHost||fixed.has(source.hostname)||knownDeployment&&source.hostname===currentHost||configured))return true;
+  }catch{return false}
+ }
+ // For browsers omitting Origin, require an explicit matching referrer plus
+ // the browser-generated same-origin fetch metadata.
+ if(site==='same-origin'&&!origin){
+  try{return new URL(req.headers.referer||'').hostname===currentHost}catch{return false}
+ }
+ return false;
 }
 async function rateLimit(key,ttl){const script='local n=redis.call("INCR",KEYS[1]); if n==1 then redis.call("EXPIRE",KEYS[1],ARGV[1]) end; return n';const url=process.env.UPSTASH_REDIS_REST_URL.replace(/\/$/,'');const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.UPSTASH_REDIS_REST_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(['EVAL',script,'1',key,String(ttl)]),signal:AbortSignal.timeout(5000)});if(!response.ok)throw Error('rate limiter unavailable');const data=await response.json();if(data.error||!Number.isFinite(Number(data.result)))throw Error('rate limiter unavailable');return Number(data.result)}
 async function allowQuota(req){const ip=String(req.headers['x-vercel-forwarded-for']||req.headers['x-real-ip']||req.headers['x-forwarded-for']||'unknown').split(',')[0].slice(0,80);const id=createHash('sha256').update(ip).digest('hex').slice(0,20);const hour=Math.floor(Date.now()/3600000),day=Math.floor(Date.now()/86400000);const [client,total]=await Promise.all([rateLimit('ped:client:'+id+':'+hour,3700),rateLimit('ped:daily:'+day,90000)]);return client<=10&&total<=80}
