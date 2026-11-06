@@ -38,8 +38,11 @@ test('Backend usa solo categorie della repository, JSON strutturato e secret ser
  assert.match(api,/const categoryEntries=library\.filter/);
  assert.match(api,/KNOWLEDGE BASE editoriale/);
  assert.match(api,/text:\{format:\{type:'json_schema'/);
- assert.match(api,/process\.env\.OPENAI_API_KEY/);
+ assert.match(api,/process\.env\.OPENROUTER_API_KEY/);
  assert.match(api,/store:false/);
+ assert.match(api,/const MODEL='openrouter\/free'/);
+ assert.match(api,/https:\/\/openrouter\.ai\/api\/v1\/responses/);
+ assert.doesNotMatch(api,/api\.openai\.com|process\.env\.OPENAI_API_KEY/);
  assert.match(api,/validCode\(req\.headers\['x-ped-ai-code'\]\)/);
  assert.match(api,/await allowQuota\(req\)/);
  assert.doesNotMatch(api,/AIza[0-9A-Za-z_-]+|sk-proj-[0-9A-Za-z_-]+/);
